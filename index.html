@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Xikipedia</title>
-    <meta property="og:url" content="https://xikipedia.org/">
+    <meta property="og:url" content="https://my-xikipedia-production.up.railway.app/">
     <meta property="og:title" content="Xikipedia">
     <meta name="description" content="Wikipedia you can doomscroll">
     <meta property="og:description" content="Wikipedia you can doomscroll">
@@ -571,7 +571,7 @@
 <body>
     <p id="loading">Loading...</p>
     <nav class="bottomNav">
-        <a href="https://xikipedia.org"><img src="/favicon.ico" class="logo" /></a>
+        <a href="https://my-xikipedia-production.up.railway.app"><img src="/favicon.ico" class="logo" /></a>
         <button data-icon="🙎🏻‍♂️" onclick="showProfilesModal()">Profiles</button>
         <button data-icon="📊" onclick="showStatsModal()">Stats</button>
         <button data-icon="⚙️" onclick="showSettingsModal()">Settings</button>
@@ -582,7 +582,7 @@
         <div><h1>Xikipedia</h1><h2 style="font-size: 100%;opacity:0.85;font-style:italic">by <a href="https://lyra.horse">rebane2001</a></h2></div>
         <p><strong>Xikipedia</strong> is a pseudo social media feed that algorithmically shows you content from <a href="https://simple.wikipedia.org/">Simple Wikipedia</a>. It is made as a demonstration of how even a basic non-ML algorithm with no data from other users can quickly learn what you engage with to suggest you more similar content. The algorithm runs locally and no data leaves your device.</p>
         <p style="margin-top:0">Once Xikipedia has loaded, it is available fully offline, and you can even install it as an app by clicking the install button.</p>
-        <p style="margin-top:0">Source code on <a href="https://github.com/rebane2001/xikipedia">GitHub</a>, discuss on <a href="https://infosec.exchange/@rebane2001/115998023365214091">fedi</a>, <a href="https://bsky.app/profile/rebane2001.bsky.social/post/3mdtj5cc7pk2b">bluesky</a>, or <a href="https://twitter.com/rebane2001/status/2018107789512474738">twitter</a>.</p>
+        <p style="margin-top:0">This modified personal fork adds Supabase-backed saved article sync. Source code for this deployed version is on <a href="https://github.com/alecvdp/my-xikipedia">GitHub</a>. Original project by <a href="https://lyra.horse">rebane2001</a>: <a href="https://github.com/rebane2001/xikipedia">xikipedia</a>.</p>
         <p style="margin-top:0;display:none" id="iosmessage">Note to iOS users: Apple arbitrarily limits the amount of memory a site can use, which means it's possible this site will crash before the loading finishes. I have no way to test for this myself as my iPhone does not do that. If this happens to you, try opening the site in desktop mode and see if that helps. If it still crashes, you'll just have to use this site from a different device. Blame Apple for creating undebuggable web platform issues while not letting you use an alternative browser engine on a device you supposedly own.</p>
         <p style="font-weight: 600;margin:0">Pick some categories to get started (optional)</p>
         <div id="categoryPickList"></div>
@@ -635,10 +635,10 @@
     <dialog class="modal" id="aboutModal" closedby=any>
         <!-- TODO: do not dupe the text manually here -->
         <div style="display:flex;justify-content:space-between;align-items:baseline"><h2>About Xikipedia</h2><button class="closeButton" aria-label="Close" onclick=aboutModal.close()>X</button></div>
-        <h3 style="font-size: 100%;opacity:0.85;font-style:italic;margin-bottom:16px">A project by <a href="https://lyra.horse">rebane2001</a></h3>
+        <h3 style="font-size: 100%;opacity:0.85;font-style:italic;margin-bottom:16px">Original project by <a href="https://lyra.horse">rebane2001</a>; personal fork by <a href="https://github.com/alecvdp">Alec van der Poel</a></h3>
         <p><strong>Xikipedia</strong> is a pseudo social media feed that algorithmically shows you content from <a href="https://simple.wikipedia.org/">Simple Wikipedia</a>. It is made as a demonstration of how even a basic non-ML algorithm with no data from other users can quickly learn what you engage with to suggest you more similar content. The algorithm runs locally and no data leaves your device.</p><br>
         <p style="margin-top:0">Once Xikipedia has loaded, it is available fully offline, and you can even install it as an app by clicking the install button.</p><br>
-        <p style="margin-top:0">Source code on <a href="https://github.com/rebane2001/xikipedia">GitHub</a>, discuss on <a href="https://infosec.exchange/@rebane2001/115998023365214091">fedi</a>, <a href="https://bsky.app/profile/rebane2001.bsky.social/post/3mdtj5cc7pk2b">bluesky</a>, or <a href="https://twitter.com/rebane2001/status/2018107789512474738">twitter</a>.</p>
+        <p style="margin-top:0">Source code for this deployed modified version is available at <a href="https://github.com/alecvdp/my-xikipedia">github.com/alecvdp/my-xikipedia</a>. Original upstream source is available at <a href="https://github.com/rebane2001/xikipedia">github.com/rebane2001/xikipedia</a>.</p>
 
     </dialog>
 <script type="text/javascript">
