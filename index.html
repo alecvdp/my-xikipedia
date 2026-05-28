@@ -619,9 +619,12 @@
             <input id="supabasePassword" type="password" autocomplete="current-password" placeholder="password" style="flex:1;min-width:160px;border-radius:32px;padding:12px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font:inherit" />
             <button onclick="signInSupabaseWithPassword()">Sign in</button>
             <button class="btn-outline" onclick="updateSupabasePassword()">Set password</button>
+            <button class="btn-outline" onclick="sendSupabaseOtp()">Email code</button>
+            <input id="supabaseOtp" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" style="width:130px;border-radius:32px;padding:12px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font:inherit" />
+            <button class="btn-outline" onclick="verifySupabaseOtp()">Verify code</button>
             <button class="btn-outline" onclick="signOutSupabase()">Sign out</button>
         </div>
-        <p>Sign in with email and password to sync saved articles to Supabase across devices. If you're already signed in with email auth, use “Set password” once, then use that password on mobile. If sync is unavailable, saves still fall back to this browser until exported.</p>
+        <p>Sign in with email and password to sync saved articles. If you do not have a password yet, use Email code → Verify code once, then enter a password and click “Set password.” If sync is unavailable, saves still fall back to this browser until exported.</p>
         <pseudo-label>Theme
         <radio-picker aria-label="Theme picker" role="radiogroup">
             <label><input type="radio" name="theme" id="theme-auto" checked>Auto</label>
@@ -718,7 +721,7 @@
     const defaultCategories = ["nature", "science", "animals", "anthropology", "places", "sociology", "art", "mathematics", "games", "technology", "music", "human sexuality"];
     let postsWithoutLike = 0;
 
-    const HTML_VERSION = "1.1.6";
+    const HTML_VERSION = "1.1.7";
 
     function loadSettings() {
         const baseSettings = {
@@ -786,6 +789,7 @@
     const supabaseAuthStatus = document.getElementById("supabaseAuthStatus");
     const supabaseEmail = document.getElementById("supabaseEmail");
     const supabasePassword = document.getElementById("supabasePassword");
+    const supabaseOtp = document.getElementById("supabaseOtp");
 
     settingsModal.querySelectorAll("input[type=checkbox], input[type=radio]").forEach(e => e.onchange = saveSettings);
 
@@ -920,13 +924,46 @@
     async function updateSupabasePassword() {
         const password = supabasePassword.value;
         if (!supabaseUser)
-            return alert("Sign in with email auth first, then set a password here.");
+            return alert("Use Email code → Verify code first, then set a password here.");
         if (!password || password.length < 8)
             return alert("Enter a password at least 8 characters long.");
         const {error} = await supabaseClient.auth.updateUser({password});
         if (error)
             return alert(`Could not set password: ${error.message}`);
         alert("Password set. You can now use email/password sign-in on other devices.");
+    }
+
+    async function sendSupabaseOtp() {
+        const email = supabaseEmail.value.trim();
+        if (!email)
+            return alert("Enter your email address first.");
+        const {error} = await supabaseClient.auth.signInWithOtp({
+            email,
+            options: {shouldCreateUser: true},
+        });
+        if (error)
+            return alert(`Could not send sign-in code: ${error.message}`);
+        alert("Sign-in code sent. Paste the code from your email here to finish signing in.");
+    }
+
+    async function verifySupabaseOtp() {
+        const email = supabaseEmail.value.trim();
+        const token = supabaseOtp.value.trim().replace(/\s/g, "");
+        if (!email)
+            return alert("Enter your email address first.");
+        if (!token)
+            return alert("Enter the code from your email.");
+        const {data, error} = await supabaseClient.auth.verifyOtp({
+            email,
+            token,
+            type: "email",
+        });
+        if (error)
+            return alert(`Could not verify code: ${error.message}`);
+        supabaseUser = data?.user ?? data?.session?.user ?? null;
+        updateSupabaseAuthStatus();
+        await loadSupabaseSavedArticles();
+        alert("Signed in. You can now set a password.");
     }
 
     async function signOutSupabase() {
