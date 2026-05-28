@@ -721,7 +721,7 @@
     const defaultCategories = ["nature", "science", "animals", "anthropology", "places", "sociology", "art", "mathematics", "games", "technology", "music", "human sexuality"];
     let postsWithoutLike = 0;
 
-    const HTML_VERSION = "1.1.7";
+    const HTML_VERSION = "1.1.8";
 
     function loadSettings() {
         const baseSettings = {
@@ -896,12 +896,12 @@
         supabaseUser = data?.session?.user ?? null;
         updateSupabaseAuthStatus();
         if (supabaseUser)
-            await loadSupabaseSavedArticles();
+            await syncSavedArticlesWithSupabase();
         supabaseClient.auth.onAuthStateChange(async (_event, session) => {
             supabaseUser = session?.user ?? null;
             updateSupabaseAuthStatus();
             if (supabaseUser)
-                await loadSupabaseSavedArticles();
+                await syncSavedArticlesWithSupabase();
         });
     }
 
@@ -917,7 +917,7 @@
             return alert(`Could not sign in: ${error.message}`);
         supabaseUser = data?.user ?? data?.session?.user ?? null;
         updateSupabaseAuthStatus();
-        await loadSupabaseSavedArticles();
+        await syncSavedArticlesWithSupabase();
         alert("Signed in.");
     }
 
@@ -962,7 +962,7 @@
             return alert(`Could not verify code: ${error.message}`);
         supabaseUser = data?.user ?? data?.session?.user ?? null;
         updateSupabaseAuthStatus();
-        await loadSupabaseSavedArticles();
+        await syncSavedArticlesWithSupabase();
         alert("Signed in. You can now set a password.");
     }
 
@@ -1034,6 +1034,19 @@
             .upsert(savedArticleToRow(article), {onConflict: "user_id,wiki_page_id"});
         if (error)
             console.warn("Could not sync saved article", article.title, error);
+    }
+
+    async function syncLocalSavedArticlesToSupabase() {
+        if (!supabaseClient || !supabaseUser)
+            return;
+        hydrateSavedArticles();
+        for (const article of savedArticles)
+            await syncSavedArticle(article);
+    }
+
+    async function syncSavedArticlesWithSupabase() {
+        await syncLocalSavedArticlesToSupabase();
+        await loadSupabaseSavedArticles();
     }
 
     function addProfile(newProfileName) {
