@@ -616,10 +616,12 @@
         <pseudo-label>Saved article sync <span id="supabaseAuthStatus">Not signed in</span></pseudo-label>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input id="supabaseEmail" type="email" placeholder="you@example.com" style="flex:1;min-width:180px;border-radius:32px;padding:12px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font:inherit" />
-            <button onclick="sendSupabaseMagicLink()">Email magic link</button>
+            <button onclick="sendSupabaseOtp()">Email code</button>
+            <input id="supabaseOtp" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" style="width:130px;border-radius:32px;padding:12px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font:inherit" />
+            <button onclick="verifySupabaseOtp()">Verify code</button>
             <button class="btn-outline" onclick="signOutSupabase()">Sign out</button>
         </div>
-        <p>Sign in to sync saved articles to Supabase across devices. If sync is unavailable, saves still fall back to this browser until exported.</p>
+        <p>Sign in with an email code to sync saved articles to Supabase across devices. If sync is unavailable, saves still fall back to this browser until exported.</p>
         <pseudo-label>Theme
         <radio-picker aria-label="Theme picker" role="radiogroup">
             <label><input type="radio" name="theme" id="theme-auto" checked>Auto</label>
@@ -783,6 +785,7 @@
     const storeDataWarning = document.getElementById("storeDataWarning");
     const supabaseAuthStatus = document.getElementById("supabaseAuthStatus");
     const supabaseEmail = document.getElementById("supabaseEmail");
+    const supabaseOtp = document.getElementById("supabaseOtp");
 
     settingsModal.querySelectorAll("input[type=checkbox], input[type=radio]").forEach(e => e.onchange = saveSettings);
 
@@ -898,17 +901,37 @@
         });
     }
 
-    async function sendSupabaseMagicLink() {
+    async function sendSupabaseOtp() {
         const email = supabaseEmail.value.trim();
         if (!email)
             return alert("Enter your email address first.");
         const {error} = await supabaseClient.auth.signInWithOtp({
             email,
-            options: {emailRedirectTo: location.href.split("#")[0]},
+            options: {shouldCreateUser: true},
         });
         if (error)
-            return alert(`Could not send magic link: ${error.message}`);
-        alert("Magic link sent. Open it in this browser to finish signing in.");
+            return alert(`Could not send sign-in code: ${error.message}`);
+        alert("Sign-in code sent. Paste the code from your email here to finish signing in.");
+    }
+
+    async function verifySupabaseOtp() {
+        const email = supabaseEmail.value.trim();
+        const token = supabaseOtp.value.trim().replace(/\s/g, "");
+        if (!email)
+            return alert("Enter your email address first.");
+        if (!token)
+            return alert("Enter the code from your email.");
+        const {data, error} = await supabaseClient.auth.verifyOtp({
+            email,
+            token,
+            type: "email",
+        });
+        if (error)
+            return alert(`Could not verify code: ${error.message}`);
+        supabaseUser = data?.user ?? data?.session?.user ?? null;
+        updateSupabaseAuthStatus();
+        await loadSupabaseSavedArticles();
+        alert("Signed in.");
     }
 
     async function signOutSupabase() {
