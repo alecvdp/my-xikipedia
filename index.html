@@ -549,6 +549,21 @@
                     margin: 0;
                     width: fit-content;
                 }
+                .savedPostExcerpt {
+                    opacity: 0.8;
+                    margin: 0 0 8px;
+                    font-size: 0.9rem;
+                }
+                .statsActions {
+                    display: flex;
+                    gap: 8px;
+                    margin: 8px 0;
+                    flex-wrap: wrap;
+                    button {
+                        font-size: 0.9rem;
+                        padding: 8px 12px;
+                    }
+                }
             }
         }
     </style>
@@ -590,7 +605,7 @@
         <p id="generalStats"></p>
         <details ontoggle=updateTopStats()><summary>Top categories</summary><div id="top100"></div></details>
         <details ontoggle=updateTopStats()><summary>Bottom categories</summary><div id="bottom100"></div></details>
-        <details ontoggle=updateLikeStats()><summary>Liked posts</summary><div id="likedPosts"></div></details>
+        <details ontoggle=updateLikeStats()><summary>Saved articles</summary><div class="statsActions"><button onclick="exportSavedArticles('markdown')">Export Markdown</button><button class="btn-outline" onclick="exportSavedArticles('json')">Export JSON</button></div><div id="likedPosts"></div></details>
     </dialog>
     <dialog class="modal" id="settingsModal" closedby=any>
         <div style="display:flex;justify-content:space-between;align-items:baseline"><h2>Settings</h2><button class="closeButton" aria-label="Close" onclick=settingsModal.close()>X</button></div>
@@ -598,6 +613,13 @@
         <p>Whether to store your algorithm data locally (the data still never leaves your device). If this is turned off, your feed will start from scratch every time.</p>
         <label>Open links in English Wikipedia<input id="setting-openMainWiki" type=checkbox></label>
         <p>The articles are pulled from Simple English Wikipedia, but you can choose to still open them in (non-Simple) English Wikipedia.</p>
+        <pseudo-label>Saved article sync <span id="supabaseAuthStatus">Not signed in</span></pseudo-label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input id="supabaseEmail" type="email" placeholder="you@example.com" style="flex:1;min-width:180px;border-radius:32px;padding:12px;background:var(--bg);color:var(--fg);border:1px solid var(--border);font:inherit" />
+            <button onclick="sendSupabaseMagicLink()">Email magic link</button>
+            <button class="btn-outline" onclick="signOutSupabase()">Sign out</button>
+        </div>
+        <p>Sign in to sync saved articles to Supabase across devices. If sync is unavailable, saves still fall back to this browser until exported.</p>
         <pseudo-label>Theme
         <radio-picker aria-label="Theme picker" role="radiogroup">
             <label><input type="radio" name="theme" id="theme-auto" checked>Auto</label>
@@ -667,7 +689,13 @@
         window.swReg = "err";
     }
 </script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script type="text/javascript">
+    const SUPABASE_URL = "https://hwvldcppjpmwvfsjavcx.supabase.co";
+    const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_1W0m1fHPVDlQwfvkzoVhzQ_NlwNTkgl";
+    const supabaseClient = window.supabase?.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+    let supabaseUser = null;
+
     const pagesArr = [];
     let noPageMaps = {};
     const recursiveCache = new Map();
@@ -677,6 +705,7 @@
     };
     let seenPosts = [];
     let likedPosts = [];
+    let savedArticles = [];
     let likesLen = 0;
     let timeSpentSession = 0;
     let timeSpentTotal = 0;
@@ -687,7 +716,7 @@
     const defaultCategories = ["nature", "science", "animals", "anthropology", "places", "sociology", "art", "mathematics", "games", "technology", "music", "human sexuality"];
     let postsWithoutLike = 0;
 
-    const HTML_VERSION = "1.1.4";
+    const HTML_VERSION = "1.1.5";
 
     function loadSettings() {
         const baseSettings = {
@@ -752,8 +781,10 @@
 
     const profilesList = document.getElementById("profilesList");
     const storeDataWarning = document.getElementById("storeDataWarning");
+    const supabaseAuthStatus = document.getElementById("supabaseAuthStatus");
+    const supabaseEmail = document.getElementById("supabaseEmail");
 
-    settingsModal.querySelectorAll("input").forEach(e => e.onchange = saveSettings);
+    settingsModal.querySelectorAll("input[type=checkbox], input[type=radio]").forEach(e => e.onchange = saveSettings);
 
     categorySearchInput.oninput = () => {
         const searchText = categorySearchInput.value;
@@ -800,13 +831,15 @@
             },
             seenPosts: [],
             likedPosts: [],
+            savedArticles: [],
             timeSpentTotal: 0,
         }
         const loadedProfile = JSON.parse(localStorage.getItem(`xikipedia-profile-${profileId}`) ?? "{}");
         const profile = Object.assign(defaultProfile, loadedProfile);
         categoryScores = profile.categoryScores;
         seenPosts = profile.seenPosts;
-        likedPosts = profile.likedPosts;
+        likedPosts = [...new Set(profile.likedPosts ?? [])];
+        savedArticles = profile.savedArticles ?? [];
         timeSpentTotal = profile.timeSpentTotal;
         profileName = profile.profileName;
         pagesArr.filter(e=>e.seen).forEach(e=>e.seen=0);
@@ -833,9 +866,119 @@
             categoryScores,
             seenPosts,
             likedPosts,
+            savedArticles,
             timeSpentTotal,
         }
         localStorage.setItem(`xikipedia-profile-${settings.profile}`, JSON.stringify(profile));
+    }
+
+    function updateSupabaseAuthStatus() {
+        if (!supabaseAuthStatus)
+            return;
+        supabaseAuthStatus.innerText = supabaseUser?.email ? `Signed in as ${supabaseUser.email}` : "Not signed in";
+    }
+
+    async function initSupabaseAuth() {
+        if (!supabaseClient) {
+            updateSupabaseAuthStatus();
+            return;
+        }
+        const {data, error} = await supabaseClient.auth.getSession();
+        if (error)
+            console.warn("Supabase session error", error);
+        supabaseUser = data?.session?.user ?? null;
+        updateSupabaseAuthStatus();
+        if (supabaseUser)
+            await loadSupabaseSavedArticles();
+        supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+            supabaseUser = session?.user ?? null;
+            updateSupabaseAuthStatus();
+            if (supabaseUser)
+                await loadSupabaseSavedArticles();
+        });
+    }
+
+    async function sendSupabaseMagicLink() {
+        const email = supabaseEmail.value.trim();
+        if (!email)
+            return alert("Enter your email address first.");
+        const {error} = await supabaseClient.auth.signInWithOtp({
+            email,
+            options: {emailRedirectTo: location.href.split("#")[0]},
+        });
+        if (error)
+            return alert(`Could not send magic link: ${error.message}`);
+        alert("Magic link sent. Open it in this browser to finish signing in.");
+    }
+
+    async function signOutSupabase() {
+        if (!supabaseClient)
+            return;
+        await supabaseClient.auth.signOut();
+        supabaseUser = null;
+        updateSupabaseAuthStatus();
+    }
+
+    function savedArticleToRow(article) {
+        return {
+            user_id: supabaseUser.id,
+            wiki_page_id: article.id,
+            title: article.title,
+            url: article.url,
+            simple_url: article.simpleUrl,
+            excerpt: article.excerpt,
+            thumb: article.thumb,
+            categories: article.categories ?? [],
+            source: article.source ?? "xikipedia",
+            saved_at: article.savedAt ?? new Date().toISOString(),
+            notes: article.notes ?? null,
+            status: article.status ?? "saved",
+        };
+    }
+
+    function rowToSavedArticle(row) {
+        return {
+            id: row.wiki_page_id,
+            title: row.title,
+            url: row.url,
+            simpleUrl: row.simple_url,
+            savedAt: row.saved_at,
+            source: row.source,
+            excerpt: row.excerpt,
+            thumb: row.thumb,
+            categories: row.categories ?? [],
+            notes: row.notes,
+            status: row.status,
+        };
+    }
+
+    async function loadSupabaseSavedArticles() {
+        if (!supabaseClient || !supabaseUser)
+            return;
+        const {data, error} = await supabaseClient
+            .from("saved_articles")
+            .select("wiki_page_id,title,url,simple_url,excerpt,thumb,categories,source,saved_at,notes,status")
+            .order("saved_at", {ascending: false});
+        if (error) {
+            console.warn("Could not load Supabase saved articles", error);
+            return;
+        }
+        const merged = new Map(savedArticles.map(article => [article.id, article]));
+        data.map(rowToSavedArticle).forEach(article => merged.set(article.id, article));
+        savedArticles = [...merged.values()].sort((a,b) => (b.savedAt ?? "").localeCompare(a.savedAt ?? ""));
+        likedPosts = [...new Set([...likedPosts, ...savedArticles.map(article => article.id).filter(Boolean)])];
+        saveProfile();
+        likeStatsStale = true;
+    }
+
+    async function syncSavedArticle(article) {
+        if (!supabaseClient || !supabaseUser || !article?.id)
+            return;
+        const {error} = await supabaseClient
+            .from("saved_articles")
+            .upsert(savedArticleToRow(article), {onConflict: "user_id,wiki_page_id"});
+        if (error)
+            console.warn("Could not sync saved article", article.title, error);
     }
 
     function addProfile(newProfileName) {
@@ -938,20 +1081,116 @@
         if (!likeStatsStale)
             return;
         likeStatsStale = false;
+        hydrateSavedArticles();
         const likedPostsEl = document.getElementById("likedPosts");
         likedPostsEl.innerText = "";
-        likedPosts.forEach(postId => {
-            const post = pagesArr.find(e=>e.id==postId);
-            const link = document.createElement(post ? "a" : "em");
+        if (!savedArticles.length) {
+            likedPostsEl.innerText = "No saved articles yet.";
+            return;
+        }
+        savedArticles.forEach(article => {
+            const post = pagesArr.find(e=>e.id==article.id);
+            const link = document.createElement(article.url ? "a" : "em");
             link.classList.add("likedPostEntry");
-            if (post) {
-                link.innerText = post.title;
-                link.href = getArticleLink(post.title);
-            } else {
-                link.innerText = `Unknown post (id: ${postId})`;
-            }
+            link.innerText = article.title ?? post?.title ?? `Unknown post (id: ${article.id})`;
+            if (article.url)
+                link.href = article.url;
             likedPostsEl.appendChild(link);
+            const excerpt = article.excerpt ?? post?.text;
+            if (excerpt) {
+                const excerptEl = document.createElement("p");
+                excerptEl.classList.add("savedPostExcerpt");
+                excerptEl.innerText = excerpt;
+                likedPostsEl.appendChild(excerptEl);
+            }
         });
+    }
+
+    function articleSlug(articleTitle) {
+        return articleTitle.replace(/ /g, '_');
+    }
+
+    function getSimpleArticleLink(articleTitle) {
+        return `https://simple.wikipedia.org/wiki/${articleSlug(articleTitle)}`;
+    }
+
+    function buildSavedArticle(post) {
+        return {
+            id: post.id,
+            title: post.title,
+            url: `https://en.wikipedia.org/wiki/${articleSlug(post.title)}`,
+            simpleUrl: getSimpleArticleLink(post.title),
+            savedAt: new Date().toISOString(),
+            source: "xikipedia",
+            excerpt: post.text,
+            thumb: post.thumb ?? null,
+            categories: [...(post.categories ?? [])].slice(0, 25),
+        };
+    }
+
+    function hydrateSavedArticles() {
+        let changed = false;
+        const existingIds = new Set(savedArticles.map(e=>e.id));
+        likedPosts.forEach(postId => {
+            if (existingIds.has(postId))
+                return;
+            const post = pagesArr.find(e=>e.id==postId);
+            savedArticles.push(post ? buildSavedArticle(post) : {id: postId, savedAt: new Date().toISOString(), source: "xikipedia"});
+            existingIds.add(postId);
+            changed = true;
+        });
+        savedArticles.sort((a,b) => (b.savedAt ?? "").localeCompare(a.savedAt ?? ""));
+        if (changed)
+            setTimeout(saveProfile,100);
+    }
+
+    function saveArticle(post) {
+        if (!likedPosts.includes(post.id))
+            likedPosts.push(post.id);
+        const existingArticle = savedArticles.find(e=>e.id==post.id);
+        let article;
+        if (!existingArticle) {
+            article = buildSavedArticle(post);
+            savedArticles.unshift(article);
+        } else {
+            article = existingArticle;
+            Object.assign(existingArticle, {...buildSavedArticle(post), savedAt: existingArticle.savedAt});
+        }
+        syncSavedArticle(article);
+        setTimeout(saveProfile,100);
+    }
+
+    function savedArticlesMarkdown() {
+        hydrateSavedArticles();
+        return savedArticles.map(article => {
+            const title = article.title ?? `Unknown post ${article.id}`;
+            const lines = [
+                `## [${title}](${article.url ?? ""})`,
+                ``,
+                `- Saved: ${article.savedAt ?? ""}`,
+                `- Simple Wikipedia: ${article.simpleUrl ?? ""}`,
+            ];
+            if (article.excerpt)
+                lines.push(``, article.excerpt);
+            return lines.join("\n");
+        }).join("\n\n");
+    }
+
+    function downloadText(filename, text, type) {
+        const blob = new Blob([text], {type});
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }
+
+    function exportSavedArticles(format) {
+        hydrateSavedArticles();
+        const date = new Date().toISOString().slice(0,10);
+        if (format == "json")
+            return downloadText(`xikipedia-saved-${date}.json`, JSON.stringify(savedArticles, null, 2), "application/json");
+        downloadText(`xikipedia-saved-${date}.md`, savedArticlesMarkdown(), "text/markdown");
     }
 
     function showStatsModal() {
@@ -963,6 +1202,7 @@
     }
 
     function showSettingsModal() {
+        updateSupabaseAuthStatus();
         settingsModal.showModal();
     }
 
@@ -1020,7 +1260,7 @@
     }
 
     function getArticleLink(articleTitle) {
-        return `https://${settings.openMainWiki ? 'en' : 'simple'}.wikipedia.org/wiki/${articleTitle.replace(/ /g, '_')}`;
+        return `https://${settings.openMainWiki ? 'en' : 'simple'}.wikipedia.org/wiki/${articleSlug(articleTitle)}`;
     }
 
     function createNextPost() {
@@ -1037,11 +1277,13 @@
         };
         postTitle.innerText = nextPost.title;
         postP.innerText = nextPost.text;
-        postYes.innerText = "Like";
+        postYes.innerText = "Save";
+        if (likedPosts.includes(nextPost.id))
+            postYes.dataset.liked = true;
         postYes.onclick = (e) => {
             if (!postYes.dataset.liked) {
                 postYes.dataset.liked = true;
-                likedPosts.push(nextPost.id);                    
+                saveArticle(nextPost);
             }
             if (!postYes.dataset.engaged)
                 postYes.dataset.engaged = engagePost(nextPost, 50 + postsWithoutLike*4);
@@ -1203,6 +1445,7 @@ async function* streamToAsyncIterable(stream) {
 
     let downloadFinished = false;
     async function main() {
+        initSupabaseAuth();
         if (/iPad|iPhone|iPod/.test(navigator.userAgent))
             document.getElementById("iosmessage").style.display = "block";
         loadStatus("loading profile");

@@ -1,0 +1,13 @@
+{
+  "name": "my-xikipedia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A personal Xikipedia fork with Supabase-backed saved articles.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

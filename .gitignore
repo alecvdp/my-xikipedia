@@ -1,0 +1,7 @@
+# Expanded local dataset generated from smoldata.json.br
+smoldata.json
+
+# Local secrets/config
+.env
+.env.*
+!.env.example
